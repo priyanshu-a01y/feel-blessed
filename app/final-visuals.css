@@ -1,0 +1,327 @@
+/* FEEL BLESSED — FINAL BACKGROUND + PLAYER */
+
+.fb-background {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: #050505;
+  isolation: isolate;
+}
+
+.fb-background-media {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  transition: opacity 1.4s cubic-bezier(.22,1,.36,1);
+}
+
+.fb-background-media.is-visible {
+  opacity: 1;
+}
+
+.fb-background-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0,0,0,.20) 0%,
+      rgba(0,0,0,.02) 42%,
+      rgba(0,0,0,.32) 100%
+    );
+}
+
+.fb-player {
+  position: fixed;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 100;
+  width: min(760px, calc(100vw - 48px));
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  padding: 9px 13px 9px 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.115), rgba(255,255,255,.045)),
+    rgba(8,8,8,.58);
+  box-shadow:
+    0 18px 55px rgba(0,0,0,.50),
+    inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(24px) saturate(135%);
+  -webkit-backdrop-filter: blur(24px) saturate(135%);
+}
+
+.fb-vinyl {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+}
+
+.fb-vinyl-disc {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(
+      circle,
+      #0a0a0a 0,
+      #111 1px,
+      #080808 2px,
+      #121212 3px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.08),
+    0 5px 18px rgba(0,0,0,.4);
+}
+
+.fb-vinyl.is-playing .fb-vinyl-disc {
+  animation: fb-vinyl-spin 8s linear infinite;
+}
+
+@keyframes fb-vinyl-spin {
+  to { transform: rotate(360deg); }
+}
+
+.fb-vinyl-ring {
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(255,255,255,.045);
+  border-radius: 50%;
+}
+
+.fb-vinyl-ring.ring-two { inset: 13px; }
+.fb-vinyl-ring.ring-three { inset: 20px; }
+
+.fb-vinyl-label {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #8c4928;
+  color: rgba(255,240,225,.9);
+  font: 600 5px/1 system-ui, sans-serif;
+  letter-spacing: .08em;
+}
+
+.fb-vinyl-hole {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #080808;
+}
+
+.fb-player-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.fb-progress-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 8px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.fb-progress-row > span {
+  color: rgba(255,255,255,.40);
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.fb-progress-row > span:last-child {
+  text-align: right;
+}
+
+.fb-seek {
+  width: 100%;
+  height: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.fb-seek::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255,255,255,.9) 0 var(--fb-progress),
+      rgba(255,255,255,.13) var(--fb-progress) 100%
+    );
+}
+
+.fb-seek::-moz-range-track {
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.13);
+}
+
+.fb-seek::-moz-range-progress {
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.9);
+}
+
+.fb-seek::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 7px;
+  height: 7px;
+  margin-top: -2.5px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.fb-seek:hover::-webkit-slider-thumb,
+.fb-seek:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.fb-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.fb-control,
+.fb-play,
+.fb-volume {
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: color .16s ease, transform .16s ease, background .16s ease;
+}
+
+.fb-control,
+.fb-volume {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: rgba(255,255,255,.54);
+}
+
+.fb-control:hover,
+.fb-volume:hover {
+  color: #fff;
+  background: rgba(255,255,255,.055);
+}
+
+.fb-control:active,
+.fb-volume:active {
+  transform: scale(.92);
+}
+
+.fb-control svg,
+.fb-volume svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fb-play {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.96);
+  color: #111;
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
+}
+
+.fb-play:hover {
+  color: #111;
+  background: #fff;
+  transform: scale(1.035);
+}
+
+.fb-play svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 700px) {
+  .fb-player {
+    left: 12px;
+    right: 12px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    width: auto;
+    min-height: 94px;
+    transform: none;
+    border-radius: 26px;
+    padding: 9px 11px;
+    gap: 11px;
+  }
+
+  .fb-vinyl,
+  .fb-vinyl-disc {
+    width: 44px;
+    height: 44px;
+  }
+
+  .fb-player-main {
+    align-self: flex-start;
+    padding-top: 5px;
+  }
+
+  .fb-controls {
+    position: absolute;
+    left: 50%;
+    bottom: 7px;
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-background-media {
+    transition: opacity .01ms linear;
+  }
+
+  .fb-vinyl.is-playing .fb-vinyl-disc {
+    animation: none;
+  }
+}

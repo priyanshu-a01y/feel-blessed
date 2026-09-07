@@ -1,725 +1,601 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-type Track = {
-  src: string;
-};
+type Track = { src: string };
 
-type Props = {
-  tracks: Track[];
-};
+type Props = { tracks: Track[] };
 
 const CROSSFADE_MS = 3000;
-const PRELOAD_AHEAD_SECONDS = 8;
+const DEFAULT_VOLUME = 0.82;
 
-function formatTime(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    return "0:00";
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  const remaining = Math.floor(seconds % 60);
-
-  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
+function formatTime(value: number) {
+  if (!Number.isFinite(value) || value < 0) return "0:00";
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.floor(value % 60);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function shuffleExcept(count: number, excluded: number) {
-  const values = Array.from({ length: count }, (_, index) => index).filter(
-    (index) => index !== excluded,
-  );
+function shuffle(list: number[]) {
+  const result = [...list];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
 
-  for (let index = values.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
-    [values[index], values[randomIndex]] = [
-      values[randomIndex],
-      values[index],
-    ];
+function makeCycle(count: number, avoid: number) {
+  const cycle = shuffle(
+    Array.from({ length: count }, (_, index) => index).filter(
+      (index) => index !== avoid,
+    ),
+  );
+  return cycle;
+}
+
+function Icon({
+  type,
+}: {
+  type: "prev" | "next" | "play" | "pause" | "volume" | "mute";
+}) {
+  if (type === "prev") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 5v14M18 6l-8 6 8 6V6Z" />
+      </svg>
+    );
   }
 
-  return values;
+  if (type === "next") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M18 5v14M6 6l8 6-8 6V6Z" />
+      </svg>
+    );
+  }
+
+  if (type === "play") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m8 5 11 7-11 7V5Z" />
+      </svg>
+    );
+  }
+
+  if (type === "pause") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 6v12M16 6v12" />
+      </svg>
+    );
+  }
+
+  if (type === "mute") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+        <path d="m17 9 4 6m0-6-4 6" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+      <path d="M16 9.5c1.3 1.4 1.3 3.6 0 5M19 7c2.5 2.8 2.5 7.2 0 10" />
+    </svg>
+  );
 }
 
 function Vinyl({ playing }: { playing: boolean }) {
   return (
-    <div className={`fb-vinyl ${playing ? "is-playing" : ""}`}>
+    <div className={`fb-vinyl ${playing ? "is-playing" : ""}`} aria-hidden="true">
       <div className="fb-vinyl-disc">
         <span className="fb-vinyl-ring ring-one" />
         <span className="fb-vinyl-ring ring-two" />
         <span className="fb-vinyl-ring ring-three" />
-        <span className="fb-vinyl-label">
-          <span>SITA</span>
-          <small>RAM</small>
-        </span>
+        <span className="fb-vinyl-label">FB</span>
         <span className="fb-vinyl-hole" />
       </div>
     </div>
   );
 }
 
-function PreviousIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6 5v14" />
-      <path d="m18 6-8 6 8 6V6Z" />
-    </svg>
-  );
-}
-
-function NextIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M18 5v14" />
-      <path d="m6 6 8 6-8 6V6Z" />
-    </svg>
-  );
-}
-
-function PlayIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m8 5 11 7-11 7V5Z" />
-    </svg>
-  );
-}
-
-function PauseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M8 6v12" />
-      <path d="M16 6v12" />
-    </svg>
-  );
-}
-
-function VolumeIcon({ muted }: { muted: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 9v6h4l5 4V5L8 9H4Z" />
-      {muted ? (
-        <>
-          <path d="m17 9 4 6" />
-          <path d="m21 9-4 6" />
-        </>
-      ) : (
-        <>
-          <path d="M16 9.5c1.3 1.4 1.3 3.6 0 5" />
-          <path d="M19 7c2.5 2.8 2.5 7.2 0 10" />
-        </>
-      )}
-    </svg>
-  );
-}
-
 export default function MusicPlayer({ tracks }: Props) {
-  const deckARef = useRef<HTMLAudioElement | null>(null);
-  const deckBRef = useRef<HTMLAudioElement | null>(null);
-  const activeDeckRef = useRef<"A" | "B">("A");
+  const aRef = useRef<HTMLAudioElement | null>(null);
+  const bRef = useRef<HTMLAudioElement | null>(null);
 
+  const activeRef = useRef<"A" | "B">("A");
   const indexRef = useRef(0);
   const playingRef = useRef(false);
-  const volumeRef = useRef(0.82);
+  const volumeRef = useRef(DEFAULT_VOLUME);
   const mutedRef = useRef(false);
 
   const queueRef = useRef<number[]>([]);
-  const queueCursorRef = useRef(0);
+  const cursorRef = useRef(0);
   const historyRef = useRef<number[]>([]);
-
-  const transitionRef = useRef(false);
-  const transitionTokenRef = useRef(0);
+  const switchingRef = useRef(false);
+  const crossfadeStartedRef = useRef(false);
   const rafRef = useRef<number | null>(null);
+  const transitionTokenRef = useRef(0);
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [volume, setVolume] = useState(0.82);
+  const [index, setIndex] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [started, setStarted] = useState(false);
+  const [muted, setMuted] = useState(false);
+
+  const getActive = useCallback(() => {
+    return activeRef.current === "A" ? aRef.current : bRef.current;
+  }, []);
+
+  const getInactive = useCallback(() => {
+    return activeRef.current === "A" ? bRef.current : aRef.current;
+  }, []);
+
+  const outputVolume = useCallback(() => {
+    return mutedRef.current ? 0 : volumeRef.current;
+  }, []);
+
+  const setVolume = useCallback((audio: HTMLAudioElement | null, value: number) => {
+    if (!audio) return;
+    audio.muted = false;
+    audio.volume = Math.max(0, Math.min(1, value));
+  }, []);
+
+  const refillQueue = useCallback((avoid: number) => {
+    queueRef.current = makeCycle(tracks.length, avoid);
+    cursorRef.current = 0;
+  }, [tracks.length]);
+
+  const nextIndex = useCallback(() => {
+    if (tracks.length < 2) return tracks.length === 1 ? 0 : -1;
+
+    if (cursorRef.current >= queueRef.current.length) {
+      refillQueue(indexRef.current);
+    }
+
+    return queueRef.current[cursorRef.current++] ?? -1;
+  }, [refillQueue, tracks.length]);
 
   const stopFade = useCallback(() => {
     if (rafRef.current !== null) {
-      window.cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
   }, []);
 
-  const actualVolume = useCallback(() => {
-    return mutedRef.current ? 0 : volumeRef.current;
+  const cleanupAudio = useCallback((audio: HTMLAudioElement | null) => {
+    if (!audio) return;
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
   }, []);
 
-  const setDeckVolume = useCallback(
-    (deck: HTMLAudioElement | null, value: number) => {
-      if (!deck) return;
-      deck.muted = false;
-      deck.volume = Math.max(0, Math.min(1, value));
-    },
-    [],
-  );
-
-  const buildQueue = useCallback(
-    (excluded: number) => {
-      queueRef.current = shuffleExcept(tracks.length, excluded);
-      queueCursorRef.current = 0;
-    },
-    [tracks.length],
-  );
-
-  const takeNextFromQueue = useCallback(() => {
-    if (tracks.length === 0) return -1;
-
-    if (
-      queueCursorRef.current >= queueRef.current.length ||
-      queueRef.current.length === 0
-    ) {
-      buildQueue(indexRef.current);
-    }
-
-    return queueRef.current[queueCursorRef.current++] ?? -1;
-  }, [buildQueue, tracks.length]);
-
-  const setCurrent = useCallback((index: number) => {
-    indexRef.current = index;
-    setCurrentIndex(index);
-    setCurrentTime(0);
-    setDuration(0);
-  }, []);
-
-  const activeDeck = useCallback(() => {
-    return activeDeckRef.current === "A"
-      ? deckARef.current
-      : deckBRef.current;
-  }, []);
-
-  const inactiveDeck = useCallback(() => {
-    return activeDeckRef.current === "A"
-      ? deckBRef.current
-      : deckARef.current;
-  }, []);
-
-  const commitDeck = useCallback(
-    (nextDeck: "A" | "B", nextIndex: number) => {
-      activeDeckRef.current = nextDeck;
-      setCurrent(nextIndex);
-
-      const oldDeck = nextDeck === "A" ? deckBRef.current : deckARef.current;
-
-      if (oldDeck) {
-        oldDeck.pause();
-        oldDeck.removeAttribute("src");
-        oldDeck.load();
-      }
-
-      setDeckVolume(
-        nextDeck === "A" ? deckARef.current : deckBRef.current,
-        actualVolume(),
-      );
-
-      playingRef.current = true;
-      setIsPlaying(true);
-    },
-    [actualVolume, setCurrent, setDeckVolume],
-  );
-
-  const directLoad = useCallback(
-    async (nextIndex: number, shouldPlay: boolean) => {
-      const deck = activeDeck();
-      if (!deck || !tracks[nextIndex]) return false;
+  const loadTrack = useCallback(
+    async (trackIndex: number, shouldPlay: boolean) => {
+      const audio = getActive();
+      if (!audio || !tracks[trackIndex]) return false;
 
       stopFade();
       transitionTokenRef.current += 1;
-      transitionRef.current = true;
+      switchingRef.current = true;
+      crossfadeStartedRef.current = false;
 
-      deck.pause();
-      deck.src = tracks[nextIndex].src;
-      deck.preload = "auto";
-      deck.currentTime = 0;
-      setDeckVolume(deck, actualVolume());
-      deck.load();
+      audio.pause();
+      audio.src = tracks[trackIndex].src;
+      audio.preload = "auto";
+      audio.currentTime = 0;
+      setVolume(audio, outputVolume());
+      audio.load();
 
-      setCurrent(nextIndex);
+      indexRef.current = trackIndex;
+      setIndex(trackIndex);
+      setCurrentTime(0);
+      setDuration(0);
 
       try {
         if (shouldPlay) {
-          await deck.play();
+          await audio.play();
           playingRef.current = true;
-          setIsPlaying(true);
+          setPlaying(true);
         } else {
           playingRef.current = false;
-          setIsPlaying(false);
+          setPlaying(false);
         }
         return true;
       } catch {
         playingRef.current = false;
-        setIsPlaying(false);
+        setPlaying(false);
         return false;
       } finally {
-        transitionRef.current = false;
+        switchingRef.current = false;
       }
     },
-    [
-      activeDeck,
-      actualVolume,
-      setCurrent,
-      setDeckVolume,
-      stopFade,
-      tracks,
-    ],
+    [getActive, outputVolume, setVolume, stopFade, tracks],
   );
 
-  const crossfadeTo = useCallback(
-    async (nextIndex: number) => {
-      const current = activeDeck();
-      const next = inactiveDeck();
+  const crossfade = useCallback(
+    async (targetIndex: number) => {
+      const current = getActive();
+      const incoming = getInactive();
 
       if (
         !current ||
-        !next ||
-        !tracks[nextIndex] ||
-        transitionRef.current ||
-        nextIndex === indexRef.current
+        !incoming ||
+        !tracks[targetIndex] ||
+        targetIndex === indexRef.current ||
+        switchingRef.current
       ) {
         return false;
       }
 
+      switchingRef.current = true;
+      crossfadeStartedRef.current = true;
       stopFade();
-      transitionRef.current = true;
-      const token = ++transitionTokenRef.current;
 
-      next.pause();
-      next.src = tracks[nextIndex].src;
-      next.preload = "auto";
-      next.currentTime = 0;
-      setDeckVolume(next, 0);
-      next.load();
+      const token = ++transitionTokenRef.current;
+      incoming.pause();
+      incoming.src = tracks[targetIndex].src;
+      incoming.preload = "auto";
+      incoming.currentTime = 0;
+      setVolume(incoming, 0);
+      incoming.load();
 
       try {
-        await next.play();
+        await incoming.play();
       } catch {
-        next.removeAttribute("src");
-        next.load();
-        transitionRef.current = false;
+        cleanupAudio(incoming);
+        switchingRef.current = false;
         return false;
       }
 
       if (token !== transitionTokenRef.current) {
-        next.pause();
-        transitionRef.current = false;
+        cleanupAudio(incoming);
+        switchingRef.current = false;
         return false;
       }
 
-      const startVolume = actualVolume();
-      const startedAt = performance.now();
+      const targetVolume = outputVolume();
+      const start = performance.now();
 
       await new Promise<void>((resolve) => {
-        const step = (now: number) => {
+        const frame = (now: number) => {
           if (token !== transitionTokenRef.current) {
-            setDeckVolume(next, 0);
+            setVolume(incoming, 0);
             resolve();
             return;
           }
 
-          const progress = Math.min(
-            1,
-            (now - startedAt) / CROSSFADE_MS,
-          );
-
-          setDeckVolume(current, startVolume * (1 - progress));
-          setDeckVolume(next, startVolume * progress);
+          const progress = Math.min(1, (now - start) / CROSSFADE_MS);
+          setVolume(current, targetVolume * (1 - progress));
+          setVolume(incoming, targetVolume * progress);
 
           if (progress >= 1) {
             resolve();
             return;
           }
 
-          rafRef.current = window.requestAnimationFrame(step);
+          rafRef.current = requestAnimationFrame(frame);
         };
 
-        rafRef.current = window.requestAnimationFrame(step);
+        rafRef.current = requestAnimationFrame(frame);
       });
 
       if (token !== transitionTokenRef.current) {
-        transitionRef.current = false;
+        switchingRef.current = false;
         return false;
       }
 
       stopFade();
-      current.pause();
-      current.removeAttribute("src");
-      current.load();
+      cleanupAudio(current);
 
-      commitDeck(activeDeckRef.current === "A" ? "B" : "A", nextIndex);
-      transitionRef.current = false;
+      activeRef.current = activeRef.current === "A" ? "B" : "A";
+      indexRef.current = targetIndex;
+      setIndex(targetIndex);
+      setCurrentTime(0);
+      setDuration(Number.isFinite(incoming.duration) ? incoming.duration : 0);
+      playingRef.current = true;
+      setPlaying(true);
+      crossfadeStartedRef.current = false;
+      switchingRef.current = false;
       return true;
     },
     [
-      activeDeck,
-      actualVolume,
-      commitDeck,
-      inactiveDeck,
-      setDeckVolume,
+      cleanupAudio,
+      getActive,
+      getInactive,
+      outputVolume,
+      setVolume,
       stopFade,
       tracks,
     ],
   );
 
-  const nextTrack = useCallback(
-    async (crossfade = true) => {
-      if (!tracks.length || transitionRef.current) return;
+  const goNext = useCallback(
+    async (fade = true) => {
+      if (switchingRef.current || !tracks.length) return;
 
-      const nextIndex = takeNextFromQueue();
-      if (nextIndex < 0) return;
+      const maxAttempts = Math.max(1, tracks.length);
+      let attempts = 0;
 
-      historyRef.current.push(indexRef.current);
+      while (attempts < maxAttempts) {
+        attempts += 1;
 
-      const success =
-        crossfade && playingRef.current
-          ? await crossfadeTo(nextIndex)
-          : await directLoad(nextIndex, playingRef.current);
+        const target = nextIndex();
+        if (target < 0) return;
 
-      if (!success) {
+        historyRef.current.push(indexRef.current);
+
+        const ok =
+          fade && playingRef.current
+            ? await crossfade(target)
+            : await loadTrack(target, playingRef.current);
+
+        if (ok) return;
+
+        // A bad/missing file should not trap the player.
         queueRef.current = queueRef.current.filter(
-          (index) => index !== nextIndex,
+          (item) => item !== target,
         );
-        if (tracks.length > 1) {
-          await nextTrack(false);
-        }
+
+        if (switchingRef.current) return;
       }
     },
-    [
-      crossfadeTo,
-      directLoad,
-      takeNextFromQueue,
-      tracks.length,
-    ],
+    [crossfade, loadTrack, nextIndex, tracks.length],
   );
 
-  const previousTrack = useCallback(async () => {
-    const current = activeDeck();
+  const previous = useCallback(async () => {
+    const audio = getActive();
+    if (!audio || switchingRef.current || !tracks.length) return;
 
-    if (!current || !tracks.length || transitionRef.current) return;
-
-    if (current.currentTime > 3) {
-      current.currentTime = 0;
+    if (audio.currentTime > 3) {
+      audio.currentTime = 0;
       setCurrentTime(0);
       return;
     }
 
-    const previousIndex = historyRef.current.pop();
-
-    if (
-      previousIndex === undefined ||
-      previousIndex === indexRef.current
-    ) {
-      current.currentTime = 0;
+    const target = historyRef.current.pop();
+    if (target === undefined) {
+      audio.currentTime = 0;
       setCurrentTime(0);
       return;
     }
 
-    queueRef.current = [
-      indexRef.current,
-      ...queueRef.current.slice(queueCursorRef.current),
-    ];
-    queueCursorRef.current = 0;
+    queueRef.current = [indexRef.current, ...queueRef.current.slice(cursorRef.current)];
+    cursorRef.current = 0;
 
-    await crossfadeTo(previousIndex);
-  }, [activeDeck, crossfadeTo, tracks.length]);
+    if (playingRef.current) {
+      await crossfade(target);
+    } else {
+      await loadTrack(target, false);
+    }
+  }, [crossfade, getActive, loadTrack, tracks.length]);
 
   const togglePlay = useCallback(async () => {
-    const deck = activeDeck();
-    if (!deck || transitionRef.current) return;
+    const audio = getActive();
+    if (!audio || switchingRef.current) return;
 
     try {
-      if (deck.paused) {
-        setDeckVolume(deck, actualVolume());
-        await deck.play();
+      if (audio.paused) {
+        setVolume(audio, outputVolume());
+        await audio.play();
         playingRef.current = true;
-        setIsPlaying(true);
-        setStarted(true);
+        setPlaying(true);
       } else {
-        deck.pause();
+        audio.pause();
         playingRef.current = false;
-        setIsPlaying(false);
+        setPlaying(false);
       }
     } catch {
+      setPlaying(false);
       playingRef.current = false;
-      setIsPlaying(false);
     }
-  }, [activeDeck, actualVolume, setDeckVolume]);
+  }, [getActive, outputVolume, setVolume]);
 
-  const seek = useCallback(
-    (value: number) => {
-      const deck = activeDeck();
-      if (!deck || !Number.isFinite(value)) return;
+  const seek = useCallback((value: number) => {
+    const audio = getActive();
+    if (!audio || !Number.isFinite(value)) return;
 
-      const safe = Math.max(
-        0,
-        Math.min(value, Number.isFinite(deck.duration) ? deck.duration : value),
-      );
+    const safe = Math.max(
+      0,
+      Math.min(value, Number.isFinite(audio.duration) ? audio.duration : value),
+    );
 
-      deck.currentTime = safe;
-      setCurrentTime(safe);
-    },
-    [activeDeck],
-  );
-
-  const changeVolume = useCallback(
-    (value: number) => {
-      const safe = Math.max(0, Math.min(1, value));
-
-      volumeRef.current = safe;
-      mutedRef.current = safe === 0;
-
-      setVolume(safe);
-      setIsMuted(safe === 0);
-
-      setDeckVolume(deckARef.current, mutedRef.current ? 0 : safe);
-      setDeckVolume(deckBRef.current, mutedRef.current ? 0 : safe);
-    },
-    [setDeckVolume],
-  );
+    audio.currentTime = safe;
+    setCurrentTime(safe);
+  }, [getActive]);
 
   const toggleMute = useCallback(() => {
-    const nextMuted = !mutedRef.current;
+    mutedRef.current = !mutedRef.current;
+    setMuted(mutedRef.current);
 
-    mutedRef.current = nextMuted;
-    setIsMuted(nextMuted);
-
-    const value = nextMuted ? 0 : volumeRef.current;
-
-    setDeckVolume(deckARef.current, value);
-    setDeckVolume(deckBRef.current, value);
-  }, [setDeckVolume]);
+    const value = outputVolume();
+    setVolume(aRef.current, value);
+    setVolume(bRef.current, value);
+  }, [outputVolume, setVolume]);
 
   useEffect(() => {
     if (!tracks.length) return;
 
-    const deckA = deckARef.current;
-    const deckB = deckBRef.current;
+    const a = aRef.current;
+    const b = bRef.current;
+    if (!a || !b) return;
 
-    if (!deckA || !deckB) return;
+    // The first song is intentionally random.
+    const first = Math.floor(Math.random() * tracks.length);
+    indexRef.current = first;
+    setIndex(first);
+    refillQueue(first);
 
-    buildQueue(0);
+    a.src = tracks[first].src;
+    a.preload = "auto";
+    setVolume(a, outputVolume());
+    a.load();
 
-    deckA.preload = "metadata";
-    deckB.preload = "metadata";
+    const timeUpdate = () => {
+      const audio = activeRef.current === "A" ? a : b;
+      if (!audio) return;
 
-    deckA.src = tracks[0].src;
-    deckA.volume = volumeRef.current;
-    deckA.muted = false;
-    deckA.load();
+      setCurrentTime(audio.currentTime);
 
-    const handleTimeUpdate = () => {
-      if (activeDeckRef.current === "A") {
-        setCurrentTime(deckA.currentTime);
-      } else {
-        setCurrentTime(deckB.currentTime);
+      // Start the true crossfade before the hard end.
+      if (
+        playingRef.current &&
+        !switchingRef.current &&
+        !crossfadeStartedRef.current &&
+        Number.isFinite(audio.duration) &&
+        audio.duration > CROSSFADE_MS / 1000 + 1 &&
+        audio.duration - audio.currentTime <= CROSSFADE_MS / 1000
+      ) {
+        crossfadeStartedRef.current = true;
+        void goNext(true);
       }
     };
 
-    const handleMetadata = () => {
-      const deck = activeDeckRef.current === "A" ? deckA : deckB;
-      setDuration(Number.isFinite(deck.duration) ? deck.duration : 0);
-    };
-
-    const handleEnded = () => {
-      if (!transitionRef.current) {
-        void nextTrack(true);
+    const metadata = () => {
+      const audio = activeRef.current === "A" ? a : b;
+      if (audio && Number.isFinite(audio.duration)) {
+        setDuration(audio.duration);
       }
     };
 
-    const handleError = () => {
-      if (!transitionRef.current) {
-        void nextTrack(false);
+    const ended = () => {
+      if (!switchingRef.current && !crossfadeStartedRef.current) {
+        void goNext(true);
       }
     };
 
-    deckA.addEventListener("timeupdate", handleTimeUpdate);
-    deckB.addEventListener("timeupdate", handleTimeUpdate);
-    deckA.addEventListener("loadedmetadata", handleMetadata);
-    deckB.addEventListener("loadedmetadata", handleMetadata);
-    deckA.addEventListener("ended", handleEnded);
-    deckB.addEventListener("ended", handleEnded);
-    deckA.addEventListener("error", handleError);
-    deckB.addEventListener("error", handleError);
+    const error = () => {
+      if (!switchingRef.current) {
+        crossfadeStartedRef.current = false;
+        void goNext(false);
+      }
+    };
+
+    for (const audio of [a, b]) {
+      audio.addEventListener("timeupdate", timeUpdate);
+      audio.addEventListener("loadedmetadata", metadata);
+      audio.addEventListener("durationchange", metadata);
+      audio.addEventListener("ended", ended);
+      audio.addEventListener("error", error);
+    }
 
     return () => {
-      deckA.removeEventListener("timeupdate", handleTimeUpdate);
-      deckB.removeEventListener("timeupdate", handleTimeUpdate);
-      deckA.removeEventListener("loadedmetadata", handleMetadata);
-      deckB.removeEventListener("loadedmetadata", handleMetadata);
-      deckA.removeEventListener("ended", handleEnded);
-      deckB.removeEventListener("ended", handleEnded);
-      deckA.removeEventListener("error", handleError);
-      deckB.removeEventListener("error", handleError);
-
       transitionTokenRef.current += 1;
       stopFade();
-      deckA.pause();
-      deckB.pause();
-      deckA.removeAttribute("src");
-      deckB.removeAttribute("src");
-      deckA.load();
-      deckB.load();
-    };
-  }, [buildQueue, nextTrack, stopFade, tracks]);
 
-  useEffect(() => {
-    const deck = activeDeck();
-    if (!deck) return;
-
-    const maybePreload = () => {
-      if (
-        deck.duration > 0 &&
-        deck.currentTime > 0 &&
-        deck.duration - deck.currentTime <= PRELOAD_AHEAD_SECONDS &&
-        !transitionRef.current
-      ) {
-        const nextIndex = queueRef.current[queueCursorRef.current];
-        const nextDeck = inactiveDeck();
-
-        if (nextIndex !== undefined && nextDeck && nextDeck.src === "") {
-          nextDeck.preload = "auto";
-          nextDeck.src = tracks[nextIndex].src;
-          nextDeck.load();
-        }
+      for (const audio of [a, b]) {
+        audio.removeEventListener("timeupdate", timeUpdate);
+        audio.removeEventListener("loadedmetadata", metadata);
+        audio.removeEventListener("durationchange", metadata);
+        audio.removeEventListener("ended", ended);
+        audio.removeEventListener("error", error);
+        cleanupAudio(audio);
       }
     };
-
-    deck.addEventListener("timeupdate", maybePreload);
-
-    return () => {
-      deck.removeEventListener("timeupdate", maybePreload);
-    };
-  }, [activeDeck, inactiveDeck, tracks]);
+  }, [cleanupAudio, goNext, outputVolume, refillQueue, setVolume, stopFade, tracks]);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-
       if (
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
         target?.isContentEditable
-      ) {
-        return;
-      }
+      ) return;
+
+      const audio = getActive();
+      if (!audio) return;
 
       if (event.code === "Space") {
         event.preventDefault();
         void togglePlay();
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        void nextTrack(true);
       } else if (event.key === "ArrowLeft") {
         event.preventDefault();
-        void previousTrack();
+        seek(Math.max(0, audio.currentTime - 5));
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        seek(
+          Number.isFinite(audio.duration)
+            ? Math.min(audio.duration, audio.currentTime + 5)
+            : audio.currentTime + 5,
+        );
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [getActive, seek, togglePlay]);
 
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nextTrack, previousTrack, togglePlay]);
-
-  if (!tracks.length) {
-    return null;
-  }
+  if (!tracks.length) return null;
 
   const progress =
-    duration > 0
-      ? Math.min(100, Math.max(0, (currentTime / duration) * 100))
-      : 0;
+    duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
   return (
-    <>
-      <audio ref={deckARef} aria-hidden="true" />
-      <audio ref={deckBRef} aria-hidden="true" />
+    <div className="fb-player" role="region" aria-label="Feel Blessed music player">
+      <audio ref={aRef} preload="metadata" aria-hidden="true" />
+      <audio ref={bRef} preload="metadata" aria-hidden="true" />
 
-      <div
-        className="fb-player"
-        role="region"
-        aria-label="Feel Blessed music player"
-      >
-        <Vinyl playing={isPlaying} />
+      <Vinyl playing={playing} />
 
-        <div className="fb-player-main">
-          <div className="fb-progress-row">
-            <span>{formatTime(currentTime)}</span>
-
-            <input
-              className="fb-seek"
-              type="range"
-              min={0}
-              max={duration > 0 ? duration : 1}
-              step={0.1}
-              value={Math.min(currentTime, duration > 0 ? duration : 1)}
-              onChange={(event) => seek(Number(event.target.value))}
-              style={{
-                ["--fb-progress" as string]: `${progress}%`,
-              }}
-              aria-label="Seek"
-            />
-
-            <span>{formatTime(duration)}</span>
-          </div>
-        </div>
-
-        <div className="fb-controls">
-          <button
-            type="button"
-            className="fb-control"
-            onClick={() => void previousTrack()}
-            aria-label="Previous song"
-          >
-            <PreviousIcon />
-          </button>
-
-          <button
-            type="button"
-            className="fb-play"
-            onClick={() => void togglePlay()}
-            aria-label={isPlaying ? "Pause" : "Play"}
-          >
-            {isPlaying ? <PauseIcon /> : <PlayIcon />}
-          </button>
-
-          <button
-            type="button"
-            className="fb-control"
-            onClick={() => void nextTrack(true)}
-            aria-label="Next song"
-          >
-            <NextIcon />
-          </button>
-
-          <button
-            type="button"
-            className={`fb-volume ${isMuted ? "is-muted" : ""}`}
-            onClick={toggleMute}
-            aria-label={isMuted ? "Unmute" : "Mute"}
-          >
-            <VolumeIcon muted={isMuted} />
-          </button>
+      <div className="fb-player-main">
+        <div className="fb-progress-row">
+          <span>{formatTime(currentTime)}</span>
+          <input
+            className="fb-seek"
+            type="range"
+            min={0}
+            max={duration > 0 ? duration : 1}
+            step={0.1}
+            value={duration > 0 ? Math.min(currentTime, duration) : 0}
+            onChange={(event) => seek(Number(event.target.value))}
+            style={{ ["--fb-progress" as string]: `${progress}%` }}
+            aria-label="Seek through song"
+          />
+          <span>{formatTime(duration)}</span>
         </div>
       </div>
 
-      {!started && (
+      <div className="fb-controls">
         <button
           type="button"
-          className="fb-start-hint"
-          onClick={() => void togglePlay()}
-          aria-label="Start listening"
+          className="fb-control"
+          onClick={() => void previous()}
+          aria-label="Previous song"
         >
-          <span>●</span>
-          TAP TO LISTEN
+          <Icon type="prev" />
         </button>
-      )}
-    </>
+
+        <button
+          type="button"
+          className="fb-play"
+          onClick={() => void togglePlay()}
+          aria-label={playing ? "Pause" : "Play"}
+        >
+          <Icon type={playing ? "pause" : "play"} />
+        </button>
+
+        <button
+          type="button"
+          className="fb-control"
+          onClick={() => void goNext(true)}
+          aria-label="Next song"
+        >
+          <Icon type="next" />
+        </button>
+
+        <button
+          type="button"
+          className={`fb-volume ${muted ? "is-muted" : ""}`}
+          onClick={toggleMute}
+          aria-label={muted ? "Unmute" : "Mute"}
+        >
+          <Icon type={muted ? "mute" : "volume"} />
+        </button>
+      </div>
+    </div>
   );
 }
