@@ -2,128 +2,106 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const BACKGROUNDS = [
-  "/bg/upscaled-video.mp4",
-  "/bg/stretching.mp4",
-  "/bg/fall-outfit.mp4",
-  "/bg/kainchi-dham.jpg",
-  "/bg/baba.jpg",
+type Media =
+  | { kind: "video"; src: string }
+  | { kind: "image"; src: string };
+
+const MEDIA_SEQUENCE: Media[] = [
+  { kind: "video", src: "/bg/upscaled-video.mp4" },
+  { kind: "video", src: "/bg/stretching.mp4" },
+  { kind: "video", src: "/bg/fall-outfit.mp4" },
+  { kind: "image", src: "/bg/kainchi-dham.jpg" },
+  { kind: "image", src: "/bg/baba.jpg" },
 ];
 
-const FIRST_VIDEO_REPEAT_COUNT = 8;
+const FIRST_VIDEO_REPEATS = 8;
+const IMAGE_DURATION_MS = 8000;
 
-function createSequence() {
-  return [
-    ...Array.from(
-      { length: FIRST_VIDEO_REPEAT_COUNT },
-      () => BACKGROUNDS[0]
-    ),
-    ...BACKGROUNDS.slice(1),
-  ];
+function nextPosition(position: number, firstVideoCount: number) {
+  if (position === 0 && firstVideoCount < FIRST_VIDEO_REPEATS - 1) {
+    return { position: 0, firstVideoCount: firstVideoCount + 1 };
+  }
+
+  if (position < MEDIA_SEQUENCE.length - 1) {
+    return { position: position + 1, firstVideoCount };
+  }
+
+  return { position: 0, firstVideoCount: 0 };
 }
 
 export default function Background() {
-  const sequenceRef = useRef(createSequence());
-  const indexRef = useRef(0);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [position, setPosition] = useState(0);
+  const [firstVideoCount, setFirstVideoCount] = useState(0);
+  const [ready, setReady] = useState(false);
+  const imageTimerRef = useRef<number | null>(null);
 
-  const [source, setSource] = useState(sequenceRef.current[0]);
+  const advance = useCallback(() => {
+    setReady(false);
 
-  const isVideo = source.toLowerCase().endsWith(".mp4");
-
-  const playVideo = useCallback(() => {
-    const video = videoRef.current;
-
-    if (!video) return;
-
-    video.muted = true;
-    video.defaultMuted = true;
-    video.playsInline = true;
-
-    void video.play().catch(() => { });
-  }, []);
-
-  const nextBackground = useCallback(() => {
-    indexRef.current =
-      (indexRef.current + 1) % sequenceRef.current.length;
-
-    setSource(sequenceRef.current[indexRef.current]);
-  }, []);
+    setPosition((currentPosition) => {
+      const result = nextPosition(currentPosition, firstVideoCount);
+      setFirstVideoCount(result.firstVideoCount);
+      return result.position;
+    });
+  }, [firstVideoCount]);
 
   useEffect(() => {
-    if (!isVideo) return;
-
-    const video = videoRef.current;
-
-    if (!video) return;
-
-    video.muted = true;
-    video.defaultMuted = true;
-    video.playsInline = true;
-    video.loop = false;
-
-    const handleEnded = () => {
-      nextBackground();
-    };
-
-    const handleError = () => {
-      nextBackground();
-    };
-
-    const handleCanPlay = () => {
-      playVideo();
-    };
-
-    video.addEventListener("ended", handleEnded);
-    video.addEventListener("error", handleError);
-    video.addEventListener("canplay", handleCanPlay);
-
-    playVideo();
-
     return () => {
-      video.removeEventListener("ended", handleEnded);
-      video.removeEventListener("error", handleError);
-      video.removeEventListener("canplay", handleCanPlay);
-    };
-  }, [isVideo, nextBackground, playVideo, source]);
-
-  useEffect(() => {
-    if (!isVideo) return;
-
-    const timer = window.setInterval(() => {
-      const video = videoRef.current;
-
-      if (!video) return;
-
-      if (video.paused && !video.ended) {
-        playVideo();
+      if (imageTimerRef.current !== null) {
+        window.clearTimeout(imageTimerRef.current);
       }
-    }, 2000);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (MEDIA_SEQUENCE[position].kind !== "image") {
+      return;
+    }
+
+    if (!ready) {
+      return;
+    }
+
+    imageTimerRef.current = window.setTimeout(
+      advance,
+      IMAGE_DURATION_MS,
+    );
 
     return () => {
-      window.clearInterval(timer);
+      if (imageTimerRef.current !== null) {
+        window.clearTimeout(imageTimerRef.current);
+        imageTimerRef.current = null;
+      }
     };
-  }, [isVideo, playVideo]);
+  }, [position, ready, advance]);
+
+  const media = MEDIA_SEQUENCE[position];
 
   return (
     <div className="fb-background" aria-hidden="true">
-      {isVideo ? (
+      {media.kind === "video" ? (
         <video
-          ref={videoRef}
-          key={source}
-          src={source}
+          key={media.src}
+          className={`fb-background-media ${ready ? "is-ready" : ""}`}
+          src={media.src}
           autoPlay
           muted
           playsInline
-          preload="auto"
-          controls={false}
+          preload="metadata"
           disablePictureInPicture
+          controlsList="nodownload noplaybackrate"
+          onCanPlay={() => setReady(true)}
+          onEnded={advance}
+          onError={advance}
         />
       ) : (
         <img
-          src={source}
+          key={media.src}
+          className={`fb-background-media ${ready ? "is-ready" : ""}`}
+          src={media.src}
           alt=""
-          draggable={false}
+          onLoad={() => setReady(true)}
+          onError={advance}
         />
       )}
 
