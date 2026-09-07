@@ -4,6 +4,8 @@ import FilmGrain from "@/components/FilmGrain";
 import MusicPlayer from "@/components/MusicPlayer";
 import About from "@/components/About";
 import PageNavigation from "@/components/PageNavigation";
+import LiveClock from "@/components/LiveClock";
+import LivePresence from "@/components/LivePresence";
 import { getTracks } from "@/lib/getTracks";
 
 export default function Home() {
@@ -13,24 +15,14 @@ export default function Home() {
     <main className="fb-site">
       <section className="fb-page" id="home">
         <Background />
-
         <FilmGrain />
 
         <header className="fb-topbar">
           <div className="fb-clock">
-            <span suppressHydrationWarning>
-              {new Date().toLocaleTimeString("en-IN", {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-              })}
-            </span>
+            <LiveClock />
           </div>
 
-          <div className="fb-live">
-            <span className="fb-live-dot" />
-            <span>126 listeners</span>
-          </div>
+          <LivePresence />
 
           <PageNavigation />
         </header>

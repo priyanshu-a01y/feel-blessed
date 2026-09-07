@@ -1,0 +1,81 @@
+/* Feel Blessed — live top bar */
+
+.fb-clock {
+  min-width: 72px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fb-live {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.fb-live-pulse {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #57e389;
+  box-shadow:
+    0 0 0 3px rgba(87, 227, 137, 0.11),
+    0 0 14px rgba(87, 227, 137, 0.58);
+  animation: fb-live-pulse 2s ease-in-out infinite;
+}
+
+.fb-live-word {
+  color: rgba(255, 255, 255, 0.57);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+}
+
+.fb-live-count {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fb-live-pulse {
+  0%, 100% {
+    opacity: .78;
+    transform: scale(.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fb-center-content {
+  transform: translateY(-2vh);
+}
+
+@media (max-width: 700px) {
+  .fb-live {
+    gap: 6px;
+  }
+
+  .fb-live-count {
+    display: none;
+  }
+
+  .fb-live-word {
+    font-size: 7px;
+  }
+
+  .fb-center-content {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-live-pulse {
+    animation: none;
+  }
+}
